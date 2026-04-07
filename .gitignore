@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+*.log
+check_out.txt
+metrics_out.txt
+check.py
+check_err.txt

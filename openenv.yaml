@@ -1,0 +1,27 @@
+name: "AI SOC Gym"
+version: "0.1.0"
+description: |
+  Reinforcement‑learning environment that simulates realistic SOC logs and multi‑stage cyber attacks.
+author: "Sai Sharath Chandranand Netha Gundeti"
+license: "MIT"
+
+tasks:
+  - id: brute
+    name: "Brute‑Force SSH (Easy)"
+    description: "Single malicious IP performs repeated login attempts."
+  - id: lateral
+    name: "Lateral Movement (Medium)"
+    description: "Attacker compromises a host and pivots internally."
+  - id: apt
+    name: "APT Multi‑Stage (Hard)"
+    description: "Phishing → credential theft → lateral movement → exfiltration."
+
+actions:
+  - type: block_ip
+    target_type: ip
+  - type: isolate_host
+    target_type: host
+  - type: allow
+    target_type: ip
+  - type: investigate
+    target_type: ip|host|user
