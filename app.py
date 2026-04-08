@@ -48,7 +48,9 @@ def root():
     }
 
 @app.post("/reset")
-def reset(req: ResetRequest):
+def reset(req: Optional[ResetRequest] = None):
+    if req is None:
+        req = ResetRequest()
     global _env
     task_cls = TASK_MAP.get(req.task)
     if task_cls is None:
