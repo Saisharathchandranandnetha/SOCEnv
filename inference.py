@@ -101,7 +101,7 @@ def run_agent(task_key: str, max_steps: int = 30) -> None:
 
             last_action_error = "null"
             action_str = "null"
-            reward_score = 0.00
+            reward_score = 0.01
             is_done = False
 
             try:
@@ -157,7 +157,7 @@ def run_agent(task_key: str, max_steps: int = 30) -> None:
 
     # 3. [END] — ALWAYS emitted, even on exception
     success_str = "true" if final_success else "false"
-    rewards_str = ",".join(f"{r:.2f}" for r in all_rewards) if all_rewards else "0.00"
+    rewards_str = ",".join(f"{r:.2f}" for r in all_rewards) if all_rewards else "0.01"
     print(
         f"[END] success={success_str} steps={len(all_rewards)} rewards={rewards_str}",
         flush=True,
