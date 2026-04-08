@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "socenv"
+version = "1.0.0"
+description = "AI SOC Gym Environment for OpenEnv"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pydantic>=2.0",
+    "openai",
+    "fastapi",
+    "uvicorn[standard]"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+exclude = ["demo*", "check*", "test*"]
