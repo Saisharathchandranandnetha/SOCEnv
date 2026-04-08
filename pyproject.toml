@@ -7,13 +7,17 @@ name = "socenv"
 version = "1.0.0"
 description = "AI SOC Gym Environment for OpenEnv"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0",
     "openai",
     "fastapi",
-    "uvicorn[standard]"
+    "uvicorn[standard]",
+    "openenv-core>=0.2.0"
 ]
+
+[project.scripts]
+server = "server.app:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

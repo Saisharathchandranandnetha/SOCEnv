@@ -4,9 +4,15 @@ Keeps the HuggingFace Space alive on port 7860 and exposes
 the OpenEnv interface via HTTP so agents can interact remotely.
 """
 
-from fastapi import FastAPI, HTTPException
+import sys
+import os
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
+
+# Ensure we can import from the root directory
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from environment import AIGymEnv
 from tasks import BruteForceSSHTask, LateralMovementTask, APTMultiStageTask
@@ -46,8 +52,6 @@ def root():
         "tasks": list(TASK_MAP.keys()),
         "status": "running",
     }
-
-from fastapi import Request
 
 @app.post("/reset")
 async def reset(request: Request):
@@ -114,3 +118,9 @@ def state():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+def main():
+    uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
+
+if __name__ == "__main__":
+    main()
