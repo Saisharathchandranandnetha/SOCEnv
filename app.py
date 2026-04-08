@@ -47,15 +47,26 @@ def root():
         "status": "running",
     }
 
+from fastapi import Request
+
 @app.post("/reset")
-def reset(req: Optional[ResetRequest] = None):
-    if req is None:
-        req = ResetRequest()
+async def reset(request: Request):
     global _env
-    task_cls = TASK_MAP.get(req.task)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+        
+    task_name = body.get("task", "brute")
+    seed = body.get("seed", 42)
+    
+    task_cls = TASK_MAP.get(task_name)
     if task_cls is None:
-        raise HTTPException(status_code=400, detail=f"Unknown task: {req.task}. Choose from {list(TASK_MAP.keys())}")
-    _env = AIGymEnv(seed=req.seed)
+        raise HTTPException(status_code=400, detail=f"Unknown task: {task_name}. Choose from {list(TASK_MAP.keys())}")
+    
+    _env = AIGymEnv(seed=seed)
     _env.load_task(task_cls())
     obs = _env.reset()
     return {
@@ -64,14 +75,24 @@ def reset(req: Optional[ResetRequest] = None):
     }
 
 @app.post("/step")
-def step(req: StepRequest):
+async def step(request: Request):
     global _env
     if _env is None:
         raise HTTPException(status_code=400, detail="Call /reset first")
+        
     try:
-        action = Action(**req.action)
+        body = await request.json()
+    except Exception:
+        body = {}
+        
+    if not isinstance(body, dict) or "action" not in body:
+        raise HTTPException(status_code=422, detail="Missing required 'action' in JSON body")
+        
+    try:
+        action = Action(**body["action"])
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Invalid action: {e}")
+        
     obs, reward, done, info = _env.step(action)
     return {
         "observation": {
