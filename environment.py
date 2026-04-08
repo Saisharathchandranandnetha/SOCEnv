@@ -89,7 +89,7 @@ class AIGymEnv:
         self._step_counter += 1
         valid, msg = self._validate_action(action)
         if not valid:
-            reward = self._compute_reward(detection=0.0, false_positive=1.0, efficiency=0.0)
+            reward = self._compute_reward(detection=0.01, false_positive=0.99, efficiency=0.01)
             info = StepInfo(reason=f"Invalid action: {msg}", confidence=0.0, action_effect="none")
             obs = Observation(
                 logs=self._generate_logs() + self._task_advance(),
@@ -109,9 +109,9 @@ class AIGymEnv:
                 alerts_triggered=self._count_alerts(logs),
             ),
         )
-        detection = 1.0 if mitigated else 0.0
-        false_positive = 1.0 if self._action_was_false_positive(action) else 0.0
-        efficiency = max(0.0, 1.0 - (self._step_counter / self.MAX_STEPS))
+        detection = 0.99 if mitigated else 0.01
+        false_positive = 0.99 if self._action_was_false_positive(action) else 0.01
+        efficiency = max(0.01, min(0.99, 1.0 - (self._step_counter / self.MAX_STEPS)))
         reward = self._compute_reward(detection, false_positive, efficiency)
         done = (
             self._step_counter >= self.MAX_STEPS or self._state.is_finished()
