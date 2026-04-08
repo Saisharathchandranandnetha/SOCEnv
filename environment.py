@@ -1,6 +1,6 @@
 # environment.py – full implementation (see analysis for code)
 import random
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from models import (
     Action,
@@ -12,7 +12,7 @@ from models import (
     RewardDetails,
     StepInfo,
 )
-from tasks import BaseTask, BruteForceSSHTask, LateralMovementTask
+from tasks import BaseTask, BruteForceSSHTask, LateralMovementTask, APTMultiStageTask
 
 # ----------------------------------------------------------------------
 # Hidden attacker model (never exported)
@@ -123,6 +123,23 @@ class AIGymEnv:
         )
         return observation, reward, done, info
 
+    def state(self) -> Dict[str, Any]:
+        """Return a serializable snapshot of the current environment state.
+
+        Required by the OpenEnv specification.
+        """
+        return {
+            "step": self._step_counter,
+            "stage": self._state.stage,
+            "attacker_ips": list(self._state.attacker_ips),
+            "compromised_hosts": list(self._state.compromised_hosts),
+            "pivot_host": self._state.pivot_host,
+            "internal_host": self._state.internal_host,
+            "data_exfiltrated": self._state.data_exfiltrated,
+            "blocked_ips": list(self._blocked_ips),
+            "isolated_hosts": list(self._isolated_hosts),
+        }
+
     # ------------------------------------------------------------------
     # Task handling helpers
     # ------------------------------------------------------------------
@@ -138,7 +155,7 @@ class AIGymEnv:
     def _task_mitigated(self) -> bool:
         if self._task and hasattr(self._task, "is_mitigated"):
             return self._task.is_mitigated(self)  # type: ignore[arg-type]
-        return self._threat_mitigated_this_step()
+        return False
 
     # ------------------------------------------------------------------
     # Validation & application
@@ -147,7 +164,7 @@ class AIGymEnv:
         if action.type == ActionType.BLOCK_IP:
             if action.target_type != "ip":
                 return False, "BLOCK_IP requires target_type='ip'"
-            if action.target not in self._ip_pool:
+            if action.target not in self._ip_pool and action.target not in self._state.attacker_ips:
                 return False, "IP unknown to the system"
             if action.target in self._blocked_ips:
                 return False, "IP already blocked"
@@ -181,6 +198,11 @@ class AIGymEnv:
                 isinstance(getattr(self, "_task", None), LateralMovementTask)
                 and action.target_type == "host"
                 and action.target in {self._state.pivot_host, self._state.internal_host}
+            ):
+                self._task.hosts_investigated.add(action.target)
+            if (
+                isinstance(getattr(self, "_task", None), APTMultiStageTask)
+                and action.target_type in {"host", "ip"}
             ):
                 self._task.hosts_investigated.add(action.target)
             self._last_action_effect = f"Investigated {action.target_type} {action.target}"
@@ -249,24 +271,22 @@ class AIGymEnv:
         false_positive: float,
         efficiency: float,
     ) -> Reward:
-        base_score = max(0.0, min(1.0, (detection - false_positive + efficiency) / 3.0))
+        from graders import compute_reward
         bonus = 0.0
         if isinstance(getattr(self, "_task", None), LateralMovementTask):
             task: LateralMovementTask = self._task  # type: ignore[assignment]
             if task.hosts_investigated:
                 bonus = 0.04
-        overall = min(1.0, base_score + bonus)
-        details = RewardDetails(
-            detection=detection,
-            false_positive_penalty=false_positive,
-            efficiency=efficiency,
-        )
-        return Reward(score=overall, details=details)
+        if isinstance(getattr(self, "_task", None), APTMultiStageTask):
+            apt_task: APTMultiStageTask = self._task  # type: ignore[assignment]
+            if apt_task.hosts_investigated:
+                bonus = 0.06  # Higher bonus for harder task investigation
+        return compute_reward(detection, false_positive, efficiency, investigation_bonus=bonus)
 
     # ------------------------------------------------------------------
     def _explain_reason(self) -> str:
         if self._state.stage == "initial_access":
-            return "Brute‑force attempts detected"
+            return "Brute-force attempts detected"
         if self._state.stage == "lateral_movement":
             return "Suspicious internal traffic observed"
         if self._state.stage == "exfiltration":

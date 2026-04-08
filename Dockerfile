@@ -1,24 +1,19 @@
-# Dockerfile – reproducible container for AI SOC Gym
-# ---------------------------------------------------
+# Dockerfile - AI SOC Gym
+# Exposes the environment as a FastAPI server on port 7860
 FROM python:3.11-slim
 
-# Create a non‑root user (best practice for hackathons)
-RUN useradd -m appuser
-WORKDIR /home/appuser
+RUN useradd -m -u 1000 user
+USER user
+ENV PATH="/home/user/.local/bin:$PATH"
 
-# System dependencies (very small set)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        gcc \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
-# Copy project files
-COPY . /home/appuser
+COPY --chown=user ./requirements.txt requirements.txt
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --chown=user . /app
 
-# Switch to the non‑root user
-USER appuser
+# Port 7860 is required by HuggingFace Spaces
+EXPOSE 7860
 
-# Default command – run a quick metrics evaluation (can be overridden)
-CMD ["python", "metrics.py"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

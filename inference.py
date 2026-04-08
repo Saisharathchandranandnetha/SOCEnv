@@ -1,36 +1,68 @@
 """inference.py – run an LLM as the SOC analyst.
 
-The script creates an `AIGymEnv`, loads a task, and then repeatedly:
-1️⃣ Formats the latest observation (list of logs) into a concise prompt.
-2️⃣ Sends the prompt to a configured LLM endpoint (OpenAI‑compatible or Claude).
-3️⃣ Parses the returned JSON into the `Action` model.
-4️⃣ Steps the environment with that action and prints a human‑readable trace.
-
-The LLM must output **exactly** a JSON object matching the `Action` schema:
-
-```json
-{ "type": "block_ip" | "isolate_host" | "allow" | "investigate",
-  "target_type": "ip" | "host" | "user",
-  "target": "<identifier>" }
-```
-
-You can set the environment variables `LLM_ENDPOINT` and `LLM_API_KEY`
-before launching the script.
+Adheres to the OpenEnv Hackathon Submission Guidelines:
+  - Uses the OpenAI Python client
+  - Reads API_BASE_URL, MODEL_NAME, HF_TOKEN from environment
+  - Emits [START] / [STEP] / [END] structured output
+  - [END] is ALWAYS emitted, even on exception
 """
 
-import json
 import os
-from typing import Any, Dict
+import json
+import argparse
+from typing import Any, Dict, List
 
-import httpx  # lightweight HTTP client (already in requirements)
+from openai import OpenAI
 
-from models import Action, ActionType
+from models import Action
 from environment import AIGymEnv
-from tasks import BruteForceSSHTask, LateralMovementTask, BaseTask
+from tasks import BruteForceSSHTask, LateralMovementTask, APTMultiStageTask
 
-# ----------------------------------------------------------------------
-# Helper: turn an Observation into a readable log block for the prompt.
-# ----------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Environment variables (with required defaults per hackathon spec)
+# ------------------------------------------------------------------
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
+
+# Initialize OpenAI client
+client = OpenAI(
+    base_url=API_BASE_URL,
+    api_key=HF_TOKEN,
+)
+
+# ------------------------------------------------------------------
+# Task registry
+# ------------------------------------------------------------------
+TASK_MAP = {
+    "brute": ("Brute-Force SSH", BruteForceSSHTask),
+    "lateral": ("Lateral Movement", LateralMovementTask),
+    "apt": ("APT Multi-Stage", APTMultiStageTask),
+}
+
+SYSTEM_PROMPT = (
+    "You are an expert Security Operations Center (SOC) analyst. "
+    "Your job is to analyze security logs and take the optimal defensive action.\n\n"
+    "RULES:\n"
+    "1. Respond ONLY with a single JSON object — no explanation, no markdown.\n"
+    "2. The JSON must match this exact schema:\n"
+    '   { "type": "<action>", "target_type": "<target>", "target": "<value>" }\n'
+    "3. Valid actions: block_ip, isolate_host, allow, investigate\n"
+    "4. Valid target_types: ip, host, user\n"
+    "5. STRATEGY:\n"
+    "   - First INVESTIGATE suspicious IPs/hosts to gather intelligence.\n"
+    "   - Then BLOCK_IP the attacker's external IP to cut command-and-control.\n"
+    "   - Then ISOLATE_HOST any compromised internal machines.\n"
+    "   - Only use ALLOW if you are confident there is no threat.\n"
+    "6. Look for: failed SSH logins, unusual process spawns (powershell, rundll32),\n"
+    "   lateral movement (internal SSH hops), credential dumps (LSASS access),\n"
+    "   and data exfiltration (large outbound transfers, DNS tunneling).\n"
+)
+
+
 def format_observation(obs) -> str:
     lines = []
     for log in obs.logs:
@@ -39,93 +71,114 @@ def format_observation(obs) -> str:
         )
     return "\n".join(lines)
 
-# ----------------------------------------------------------------------
-# Simple wrapper around the LLM endpoint.
-# ----------------------------------------------------------------------
-def call_llm(prompt: str) -> Dict[str, Any]:
-    endpoint = os.getenv("LLM_ENDPOINT")
-    api_key = os.getenv("LLM_API_KEY")
-    if not endpoint or not api_key:
-        raise RuntimeError("LLM_ENDPOINT and LLM_API_KEY must be set in the environment")
 
-    headers = {"x-api-key": api_key, "Content-Type": "application/json"}
-    payload = {
-        "model": "claude-sonnet-4-20250514",
-        "max_tokens": 512,
-        "system": (
-            "You are a SOC analyst. Analyse the logs and output a JSON action "
-            "matching the Action schema. Respond ONLY with the JSON object."
-        ),
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    resp = httpx.post(endpoint, json=payload, headers=headers, timeout=30.0)
-    resp.raise_for_status()
-    data = resp.json()
-    # Anthropic Messages API returns content as list of blocks
-    raw = data["content"][0]["text"]
-    return json.loads(raw)
+# ------------------------------------------------------------------
+# Main agent loop — one episode
+# ------------------------------------------------------------------
+def run_agent(task_key: str, max_steps: int = 30) -> None:
+    task_label, task_cls = TASK_MAP[task_key]
+    benchmark_name = "ai-soc-gym"
 
-# ----------------------------------------------------------------------
-# Main loop – runs until the environment signals `done`.
-# ----------------------------------------------------------------------
-def run_agent(env: AIGymEnv, max_steps: int = 30) -> None:
+    env = AIGymEnv(seed=42)
+    env.load_task(task_cls())
+
+    # 1. [START]
+    print(
+        f"[START] task={task_key} env={benchmark_name} model={MODEL_NAME}",
+        flush=True,
+    )
+
     obs = env.reset()
-    print("\n=== INITIAL OBSERVATION ===")
-    print(format_observation(obs))
+    all_rewards: List[float] = []
+    final_success = False
 
-    for step in range(1, max_steps + 1):
-        prompt = (
-            "You are a SOC analyst. Given the following log entries, decide on a single "
-            "action. Respond ONLY with a JSON object matching the Action schema.\n\n"
-            f"{format_observation(obs)}"
-        )
-        try:
-            llm_out = call_llm(prompt)
-        except Exception as exc:
-            print(f"[LLM error] {exc}")
-            break
+    try:
+        for step in range(1, max_steps + 1):
+            prompt = (
+                "Analyze these security logs and respond with ONE JSON action:\n\n"
+                f"{format_observation(obs)}"
+            )
 
-        try:
-            action = Action(**llm_out)
-        except Exception as exc:
-            print(f"[Action parsing error] {exc}")
-            break
+            last_action_error = "null"
+            action_str = "null"
+            reward_score = 0.00
+            is_done = False
 
-        obs, reward, done, info = env.step(action)
+            try:
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                )
+                raw_content = response.choices[0].message.content
 
-        print(f"\n--- STEP {step} ---")
-        print(f"Action: {action.type.value} ({action.target_type}={action.target})")
-        print(f"Info.reason:   {info.reason}")
-        print(f"Info.effect:   {info.action_effect}")
-        print(f"Reward.score: {reward.score:.3f}")
-        print("Logs:")
-        print(format_observation(obs))
+                # Strip markdown code fences if present
+                if raw_content.startswith("```json"):
+                    raw_content = raw_content[7:]
+                if raw_content.startswith("```"):
+                    raw_content = raw_content[3:]
+                if raw_content.endswith("```"):
+                    raw_content = raw_content[:-3]
+                raw_content = raw_content.strip()
 
-        if done:
-            print("\n*** EPISODE FINISHED ***")
-            break
+                llm_out = json.loads(raw_content)
+                action = Action(**llm_out)
+                action_str = json.dumps(llm_out, separators=(",", ":"))
 
-# ----------------------------------------------------------------------
-# CLI entry point – pick a task via --task flag.
-# ----------------------------------------------------------------------
+                obs, reward, done, info = env.step(action)
+                reward_score = reward.score
+                is_done = done
+
+                # Check if the defender successfully mitigated the attack
+                if done and not env._state.data_exfiltrated:
+                    final_success = True
+
+            except Exception as exc:
+                last_action_error = str(exc).replace("\n", " ").replace("\r", "")
+                is_done = True
+
+            all_rewards.append(reward_score)
+
+            # 2. [STEP]
+            done_str = "true" if is_done else "false"
+            print(
+                f"[STEP] step={step} action={action_str} reward={reward_score:.2f} "
+                f"done={done_str} error={last_action_error}",
+                flush=True,
+            )
+
+            if is_done:
+                break
+
+    except Exception:
+        pass  # Ensure [END] is always printed below
+
+    # 3. [END] — ALWAYS emitted, even on exception
+    success_str = "true" if final_success else "false"
+    rewards_str = ",".join(f"{r:.2f}" for r in all_rewards) if all_rewards else "0.00"
+    print(
+        f"[END] success={success_str} steps={len(all_rewards)} rewards={rewards_str}",
+        flush=True,
+    )
+
+
+# ------------------------------------------------------------------
+# CLI
+# ------------------------------------------------------------------
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(description="Run LLM SOC agent")
     parser.add_argument(
         "--task",
-        choices=["brute", "lateral", "apt"],
-        default="lateral",
-        help="Which predefined task to load",
+        choices=["brute", "lateral", "apt", "all"],
+        default="all",
+        help="Which task to evaluate (default: all)",
     )
     args = parser.parse_args()
 
-    env = AIGymEnv(seed=42)
-    if args.task == "brute":
-        env.load_task(BruteForceSSHTask())
-    elif args.task == "lateral":
-        env.load_task(LateralMovementTask())
+    if args.task == "all":
+        for key in TASK_MAP:
+            run_agent(key)
     else:
-        raise NotImplementedError("APT task not implemented yet")
-
-    run_agent(env)
+        run_agent(args.task)

@@ -1,32 +1,19 @@
-"""metrics.py – batch evaluation utilities for AI SOC Gym.
+"""metrics.py - batch evaluation utilities for AI SOC Gym.
 
-The module runs many episodes (with a deterministic seed per episode) using a
-simple baseline policy that blocks any IP seen in the latest logs.  It then
-aggregates the following metrics:
-
-* **avg_steps** – average number of steps taken before termination.
-* **success_rate** – fraction of episodes where the attack succeeded
-  (i.e., data exfiltrated).
-* **mean_detection** – average `detection` component of the reward.
-* **mean_false_positive** – average false‑positive penalty.
-
-You can invoke the script directly:
-```
-python metrics.py
-```
-which will evaluate both the easy (Brute‑Force) and medium (Lateral‑Movement)
-tasks and print a concise report.
+Runs many episodes using a simple baseline policy that blocks any IP
+seen in the latest logs, then aggregates metrics across all three tasks.
 """
 
 import random
 from typing import List, Tuple, Dict
 
 from environment import AIGymEnv
-from tasks import BruteForceSSHTask, LateralMovementTask, BaseTask
+from tasks import BruteForceSSHTask, LateralMovementTask, APTMultiStageTask, BaseTask
 from models import Action, ActionType
 
+
 # ----------------------------------------------------------------------
-# Simple deterministic policy – block any IP observed in the logs.
+# Simple deterministic policy - block any IP observed in the logs.
 # ----------------------------------------------------------------------
 def block_ip_policy(env) -> Action:
     ip_set = {log.ip for log in env._last_observation.logs if log.ip}
@@ -36,20 +23,17 @@ def block_ip_policy(env) -> Action:
             target_type="ip",
             target=next(iter(ip_set)),
         )
-    # fallback – allow a dummy IP (no effect)
+    # fallback - allow a dummy IP (no effect)
     return Action(
         type=ActionType.ALLOW,
         target_type="ip",
         target="0.0.0.0",
     )
 
+
 # ----------------------------------------------------------------------
 def run_episode(env: AIGymEnv, policy) -> Tuple[int, bool, float, float]:
-    """Run a single episode using *policy* and return metrics.
-
-    Returns:
-        steps_used, success_flag, mean_detection, mean_false_positive
-    """
+    """Run a single episode using *policy* and return metrics."""
     obs = env.reset()
     env._last_observation = obs
     detections: List[float] = []
@@ -65,6 +49,7 @@ def run_episode(env: AIGymEnv, policy) -> Tuple[int, bool, float, float]:
             break
     success = env._state.data_exfiltrated
     return step, success, sum(detections) / len(detections), sum(false_positives) / len(false_positives)
+
 
 # ----------------------------------------------------------------------
 def evaluate(task: BaseTask, episodes: int = 30) -> Dict[str, float]:
@@ -85,10 +70,12 @@ def evaluate(task: BaseTask, episodes: int = 30) -> Dict[str, float]:
         "mean_false_positive": sum(fps) / len(fps),
     }
 
+
 # ----------------------------------------------------------------------
 if __name__ == "__main__":
-    print("=== Brute‑Force (Task 1) ===")
+    print("=== Brute-Force SSH (Task 1 - Easy) ===")
     print(evaluate(BruteForceSSHTask()))
-    print("\n=== Lateral‑Movement (Task 2) ===")
+    print("\n=== Lateral Movement (Task 2 - Medium) ===")
     print(evaluate(LateralMovementTask()))
-    # Future: add evaluation for the APT task here.
+    print("\n=== APT Multi-Stage (Task 3 - Hard) ===")
+    print(evaluate(APTMultiStageTask()))

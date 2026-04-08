@@ -7,5 +7,6 @@ venv/
 *.log
 check_out.txt
 metrics_out.txt
-check.py
 check_err.txt
+demo3_output.txt
+output.txt
