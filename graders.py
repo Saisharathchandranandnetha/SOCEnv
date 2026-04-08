@@ -24,6 +24,10 @@ def compute_reward(
     investigation_bonus: float – optional extra boost for a "investigate‑first"
         strategy (used by the medium task).
     """
+    detection = max(0.01, min(0.99, detection))
+    false_positive = max(0.01, min(0.99, false_positive))
+    efficiency = max(0.01, min(0.99, efficiency))
+    
     base = max(0.01, min(0.99, (detection - false_positive + efficiency) / 3.0))
     overall = max(0.01, min(0.99, base + investigation_bonus))
     details = RewardDetails(

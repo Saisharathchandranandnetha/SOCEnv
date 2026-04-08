@@ -48,14 +48,14 @@ class Action(BaseModel):
 
 class RewardDetails(BaseModel):
     """Components that make up the reward."""
-    detection: float = Field(..., ge=0.0, le=1.0, description="1.0 if attack mitigated, else 0.0")
-    false_positive_penalty: float = Field(..., ge=0.0, le=1.0, description="Penalty for blocking benign traffic")
-    efficiency: float = Field(..., ge=0.0, le=1.0, description="Higher when fewer steps used")
+    detection: float = Field(..., gt=0.0, lt=1.0, description=">0.0 if attack mitigated, else tiny value")
+    false_positive_penalty: float = Field(..., gt=0.0, lt=1.0, description="Penalty for blocking benign traffic")
+    efficiency: float = Field(..., gt=0.0, lt=1.0, description="Higher when fewer steps used")
 
 
 class Reward(BaseModel):
     """Reward signal for the agent."""
-    score: float = Field(..., ge=0.0, le=1.0, description="Final reward score (0-1)")
+    score: float = Field(..., gt=0.0, lt=1.0, description="Final reward score (0-1, strictly)")
     details: RewardDetails = Field(..., description="Breakdown of reward components")
 
 
