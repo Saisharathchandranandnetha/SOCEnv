@@ -42,6 +42,28 @@ class ResetRequest(BaseModel):
 class StepRequest(BaseModel):
     action: Dict[str, Any]
 
+# ---------- Helper: clamp all floats in reward to strictly (0, 1) ----------
+
+def _clamp(v: float) -> float:
+    """Ensure score is strictly between 0 and 1 — never exactly 0.0 or 1.0."""
+    return max(0.01, min(0.99, float(v)))
+
+def _safe_reward(reward_dict: dict) -> dict:
+    """Recursively clamp all float values in a reward dict to strictly (0.01, 0.99).
+    
+    The OpenEnv validator calls /step via REST and reads the reward.score directly
+    from the JSON response. This is the definitive safety net at the API boundary.
+    """
+    result = {}
+    for k, v in reward_dict.items():
+        if isinstance(v, float):
+            result[k] = _clamp(v)
+        elif isinstance(v, dict):
+            result[k] = _safe_reward(v)
+        else:
+            result[k] = v
+    return result
+
 # ---------- Endpoints ----------
 
 @app.get("/")
@@ -62,14 +84,17 @@ async def reset(request: Request):
         body = {}
     if not isinstance(body, dict):
         body = {}
-        
+
     task_name = body.get("task", "brute")
     seed = body.get("seed", 42)
-    
+
     task_cls = TASK_MAP.get(task_name)
     if task_cls is None:
-        raise HTTPException(status_code=400, detail=f"Unknown task: {task_name}. Choose from {list(TASK_MAP.keys())}")
-    
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown task: {task_name}. Choose from {list(TASK_MAP.keys())}"
+        )
+
     _env = AIGymEnv(seed=seed)
     _env.load_task(task_cls())
     obs = _env.reset()
@@ -83,27 +108,33 @@ async def step(request: Request):
     global _env
     if _env is None:
         raise HTTPException(status_code=400, detail="Call /reset first")
-        
+
     try:
         body = await request.json()
     except Exception:
         body = {}
-        
+
     if not isinstance(body, dict) or "action" not in body:
         raise HTTPException(status_code=422, detail="Missing required 'action' in JSON body")
-        
+
     try:
         action = Action(**body["action"])
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Invalid action: {e}")
-        
+
     obs, reward, done, info = _env.step(action)
+
+    # CRITICAL: Clamp all reward floats to strictly (0.01, 0.99) at the API
+    # boundary. The OpenEnv validator reads reward.score directly from this
+    # JSON response — any exact 0.0 or 1.0 will fail Task Validation.
+    reward_dict = _safe_reward(reward.model_dump())
+
     return {
         "observation": {
             "logs": [log.model_dump() for log in obs.logs],
             "metadata": obs.metadata.model_dump(),
         },
-        "reward": reward.model_dump(),
+        "reward": reward_dict,
         "done": done,
         "info": info.model_dump(),
     }
