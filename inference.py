@@ -151,6 +151,10 @@ def model_action(obs, task_key: str) -> dict:
     return json.loads(raw_content.strip())
 
 
+def sanitize_error_message(exc: Exception) -> str:
+    return str(exc).replace("\n", " ").replace("\r", " ")
+
+
 def run_agent(task_key: str, max_steps: int = 20) -> None:
     benchmark_name = "ai-soc-gym"
     _, task_cls = TASK_MAP[task_key]
@@ -175,7 +179,7 @@ def run_agent(task_key: str, max_steps: int = 20) -> None:
                 llm_out = model_action(obs, task_key)
             except Exception as model_exc:
                 llm_out = heuristic_action(obs, task_key)
-                last_action_error = f"fallback:{str(model_exc).replace('\n', ' ').replace('\r', ' ')}"
+                last_action_error = f"fallback:{sanitize_error_message(model_exc)}"
 
             action = Action(**llm_out)
             action_str = json.dumps(llm_out, separators=(",", ":"))
@@ -184,7 +188,7 @@ def run_agent(task_key: str, max_steps: int = 20) -> None:
             if done and not env._state.data_exfiltrated:
                 final_success = True
         except Exception as exc:
-            last_action_error = str(exc).replace("\n", " ").replace("\r", " ")
+            last_action_error = sanitize_error_message(exc)
             done = True
 
         all_rewards.append(reward_score)
