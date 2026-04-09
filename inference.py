@@ -194,7 +194,7 @@ def run_agent(task_key: str, max_steps: int = 20) -> None:
         all_rewards.append(reward_score)
         done_str = "true" if done else "false"
         print(
-            f"[STEP] step={step} action={action_str} reward={reward_score:.2f} "
+            f"[STEP] step={step} action={action_str} reward={reward_score:.3f} "
             f"done={done_str} error={last_action_error}",
             flush=True,
         )
@@ -203,7 +203,7 @@ def run_agent(task_key: str, max_steps: int = 20) -> None:
             break
 
     success_str = "true" if final_success else "false"
-    rewards_str = ",".join(f"{reward:.2f}" for reward in all_rewards) if all_rewards else "0.01"
+    rewards_str = ",".join(f"{reward:.3f}" for reward in all_rewards) if all_rewards else "0.01"
     print(f"[END] success={success_str} steps={len(all_rewards)} rewards={rewards_str}", flush=True)
 
 
