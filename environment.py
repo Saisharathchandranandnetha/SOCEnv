@@ -109,13 +109,17 @@ class AIGymEnv:
                 alerts_triggered=self._count_alerts(logs),
             ),
         )
-        detection = 0.99 if mitigated else 0.01
-        false_positive = 0.99 if self._action_was_false_positive(action) else 0.01
-        efficiency = max(0.01, min(0.99, 1.0 - (self._step_counter / self.MAX_STEPS)))
-        reward = self._compute_reward(detection, false_positive, efficiency)
         done = (
-            self._step_counter >= self.MAX_STEPS or self._state.is_finished()
+            self._step_counter >= self.MAX_STEPS or self._state.is_finished() or mitigated
         )
+        
+        if done:
+            detection = 0.99 if mitigated else 0.01
+            false_positive = 0.99 if self._action_was_false_positive(action) else 0.01
+            efficiency = max(0.01, min(0.99, 1.0 - (self._step_counter / self.MAX_STEPS)))
+            reward = self._compute_reward(detection, false_positive, efficiency, apply_bonus=True)
+        else:
+            reward = self._compute_reward(0.01, 0.99, 0.01, apply_bonus=False)
         info = StepInfo(
             reason=self._explain_reason(),
             confidence=self._rand.uniform(0.7, 0.99),
@@ -270,17 +274,19 @@ class AIGymEnv:
         detection: float,
         false_positive: float,
         efficiency: float,
+        apply_bonus: bool = True,
     ) -> Reward:
         from graders import compute_reward
         bonus = 0.0
-        if isinstance(getattr(self, "_task", None), LateralMovementTask):
-            task: LateralMovementTask = self._task  # type: ignore[assignment]
-            if task.hosts_investigated:
-                bonus = 0.04
-        if isinstance(getattr(self, "_task", None), APTMultiStageTask):
-            apt_task: APTMultiStageTask = self._task  # type: ignore[assignment]
-            if apt_task.hosts_investigated:
-                bonus = 0.06  # Higher bonus for harder task investigation
+        if apply_bonus:
+            if isinstance(getattr(self, "_task", None), LateralMovementTask):
+                task: LateralMovementTask = self._task  # type: ignore[assignment]
+                if task.hosts_investigated:
+                    bonus = 0.04
+            if isinstance(getattr(self, "_task", None), APTMultiStageTask):
+                apt_task: APTMultiStageTask = self._task  # type: ignore[assignment]
+                if apt_task.hosts_investigated:
+                    bonus = 0.06  # Higher bonus for harder task investigation
         return compute_reward(detection, false_positive, efficiency, investigation_bonus=bonus)
 
     # ------------------------------------------------------------------
