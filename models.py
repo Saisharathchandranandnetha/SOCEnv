@@ -48,19 +48,19 @@ class Action(BaseModel):
 
 class RewardDetails(BaseModel):
     """Components that make up the reward."""
-    detection: float = Field(..., gt=0.0, lt=1.0, description=">0.0 if attack mitigated, else tiny value")
-    false_positive_penalty: float = Field(..., gt=0.0, lt=1.0, description="Penalty for blocking benign traffic")
-    efficiency: float = Field(..., gt=0.0, lt=1.0, description="Higher when fewer steps used")
+    detection: float = Field(..., ge=0.01, le=0.99, description=">0.0 if attack mitigated, else tiny value")
+    false_positive_penalty: float = Field(..., ge=0.01, le=0.99, description="Penalty for blocking benign traffic")
+    efficiency: float = Field(..., ge=0.01, le=0.99, description="Higher when fewer steps used")
 
 
 class Reward(BaseModel):
     """Reward signal for the agent."""
-    score: float = Field(..., gt=0.0, lt=1.0, description="Final reward score (0-1, strictly)")
+    score: float = Field(..., ge=0.01, le=0.99, description="Final reward score (0-1, strictly)")
     details: RewardDetails = Field(..., description="Breakdown of reward components")
 
 
 class StepInfo(BaseModel):
     """Debugging information returned after each step."""
     reason: str = Field(..., description="Human-readable explanation of what happened")
-    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence in the explanation")
+    confidence: float = Field(..., ge=0.01, le=0.99, description="Confidence in the explanation")
     action_effect: str = Field(..., description="Description of what the action actually did")

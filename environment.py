@@ -90,7 +90,7 @@ class AIGymEnv:
         valid, msg = self._validate_action(action)
         if not valid:
             reward = self._compute_reward(detection=0.01, false_positive=0.99, efficiency=0.01)
-            info = StepInfo(reason=f"Invalid action: {msg}", confidence=0.0, action_effect="none")
+            info = StepInfo(reason=f"Invalid action: {msg}", confidence=0.01, action_effect="none")
             obs = Observation(
                 logs=self._generate_logs() + self._task_advance(),
                 metadata=ObservationMetadata(step=self._step_counter, alerts_triggered=0),
