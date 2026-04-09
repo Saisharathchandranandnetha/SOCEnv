@@ -45,8 +45,8 @@ class StepRequest(BaseModel):
 # ---------- Helper: clamp all floats in reward to strictly (0, 1) ----------
 
 def _clamp(v: float) -> float:
-    """Ensure score is strictly between 0 and 1 — never exactly 0.0 or 1.0."""
-    return max(0.01, min(0.99, float(v)))
+    """Round to 1 decimal place, strictly between 0 and 1 (never 0.0 or 1.0)."""
+    return round(max(0.1, min(0.9, float(v))), 1)
 
 def _safe_reward(reward_dict: dict) -> dict:
     """Recursively clamp all float values in a reward dict to strictly (0.01, 0.99).
