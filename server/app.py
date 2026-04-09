@@ -114,11 +114,18 @@ async def step(request: Request):
     except Exception:
         body = {}
 
-    if not isinstance(body, dict) or "action" not in body:
+    # Accept BOTH formats:
+    # 1. {"action": {"type": ..., "target_type": ..., "target": ...}}  (our format)
+    # 2. {"type": ..., "target_type": ..., "target": ...}              (OpenEnv validator format)
+    if isinstance(body, dict) and "action" in body:
+        action_data = body["action"]
+    elif isinstance(body, dict) and "type" in body:
+        action_data = body  # action sent directly
+    else:
         raise HTTPException(status_code=422, detail="Missing required 'action' in JSON body")
 
     try:
-        action = Action(**body["action"])
+        action = Action(**action_data)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Invalid action: {e}")
 
