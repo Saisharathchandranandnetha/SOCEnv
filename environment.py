@@ -89,8 +89,8 @@ class AIGymEnv:
         self._step_counter += 1
         valid, msg = self._validate_action(action)
         if not valid:
-            reward = self._compute_reward(detection=0.01, false_positive=0.99, efficiency=0.01)
-            info = StepInfo(reason=f"Invalid action: {msg}", confidence=0.01, action_effect="none")
+            reward = self._compute_reward(detection=0.05, false_positive=0.95, efficiency=0.05)
+            info = StepInfo(reason=f"Invalid action: {msg}", confidence=0.05, action_effect="none")
             obs = Observation(
                 logs=self._generate_logs() + self._task_advance(),
                 metadata=ObservationMetadata(step=self._step_counter, alerts_triggered=0),
@@ -114,15 +114,15 @@ class AIGymEnv:
         )
         
         if done:
-            detection = 0.99 if mitigated else 0.01
-            false_positive = 0.99 if self._action_was_false_positive(action) else 0.01
-            efficiency = max(0.01, min(0.99, 1.0 - (self._step_counter / self.MAX_STEPS)))
+            detection = 0.95 if mitigated else 0.05
+            false_positive = 0.95 if self._action_was_false_positive(action) else 0.05
+            efficiency = max(0.05, min(0.95, 1.0 - (self._step_counter / self.MAX_STEPS)))
             reward = self._compute_reward(detection, false_positive, efficiency, apply_bonus=True)
         else:
-            reward = self._compute_reward(0.01, 0.99, 0.01, apply_bonus=False)
+            reward = self._compute_reward(0.05, 0.95, 0.05, apply_bonus=False)
         info = StepInfo(
             reason=self._explain_reason(),
-            confidence=self._rand.uniform(0.7, 0.99),
+            confidence=self._rand.uniform(0.7, 0.95),
             action_effect=self._last_action_effect,
         )
         return observation, reward, done, info

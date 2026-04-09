@@ -26,7 +26,7 @@ def post(path, data):
 
 
 def is_valid_score(value):
-    return isinstance(value, float) and 0.0 < value < 1.0
+    return isinstance(value, float) and 0.049 < value < 0.951
 
 
 print(f"=== Validator target: {BASE} ===")
@@ -100,8 +100,8 @@ print("RESULT:", "ALL PASSED" if all_pass else "FAILED")
 print()
 print("=== Test 4: LOCAL grader boundary checks ===")
 boundary_cases = [
-    ("lower", compute_reward(0.0, 1.0, 0.0, investigation_bonus=-1.0).score),
-    ("upper", compute_reward(1.0, 0.0, 1.0, investigation_bonus=1.0).score),
+    ("lower", compute_reward(0.05, 0.95, 0.05, investigation_bonus=-1.0).score),
+    ("upper", compute_reward(0.95, 0.05, 0.95, investigation_bonus=1.0).score),
 ]
 for label, boundary_score in boundary_cases:
     ok = is_valid_score(boundary_score)

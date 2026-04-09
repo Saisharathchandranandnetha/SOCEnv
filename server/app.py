@@ -46,10 +46,10 @@ class StepRequest(BaseModel):
 
 def _clamp(v: float) -> float:
     """Clamp to the same strict reward bounds used by the local grader."""
-    return max(0.01, min(0.99, float(v)))
+    return max(0.05, min(0.95, float(v)))
 
 def _safe_reward(reward_dict: dict) -> dict:
-    """Recursively clamp all float values in a reward dict to strictly (0.01, 0.99).
+    """Recursively clamp all float values in a reward dict to strictly (0.05, 0.95).
     
     The OpenEnv validator calls /step via REST and reads the reward.score directly
     from the JSON response. This is the definitive safety net at the API boundary.
@@ -131,7 +131,7 @@ async def step(request: Request):
 
     obs, reward, done, info = _env.step(action)
 
-    # CRITICAL: Clamp all reward floats to strictly (0.01, 0.99) at the API
+    # CRITICAL: Clamp all reward floats to strictly (0.05, 0.95) at the API
     # boundary. The OpenEnv validator reads reward.score directly from this
     # JSON response — any exact 0.0 or 1.0 will fail Task Validation.
     reward_dict = _safe_reward(reward.model_dump())

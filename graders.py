@@ -7,8 +7,8 @@ scores are normalized so they always remain strictly inside ``(0, 1)``.
 from models import Reward, RewardDetails
 
 
-MIN_SCORE = 0.01
-MAX_SCORE = 0.99
+MIN_SCORE = 0.05
+MAX_SCORE = 0.95
 
 
 def _strict_unit_interval(value: float) -> float:
