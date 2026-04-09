@@ -130,11 +130,16 @@ async def step(request: Request):
         raise HTTPException(status_code=422, detail=f"Invalid action: {e}")
 
     obs, reward, done, info = _env.step(action)
+    raw_reward = reward.model_dump()
 
     # CRITICAL: Clamp all reward floats to strictly (0.05, 0.95) at the API
     # boundary. The OpenEnv validator reads reward.score directly from this
     # JSON response — any exact 0.0 or 1.0 will fail Task Validation.
-    reward_dict = _safe_reward(reward.model_dump())
+    reward_dict = _safe_reward(raw_reward)
+
+    import sys
+    sys.stderr.write(f"\n[DEBUG] RAW REWARD: {raw_reward}\n")
+    sys.stderr.write(f"[DEBUG] SAFE REWARD: {reward_dict}\n")
 
     return {
         "observation": {

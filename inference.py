@@ -203,8 +203,13 @@ def run_agent(task_key: str, max_steps: int = 20) -> None:
             break
 
     success_str = "true" if final_success else "false"
+    final_score = sum(all_rewards) / len(all_rewards) if all_rewards else 0.05
     rewards_str = ",".join(f"{reward:.3f}" for reward in all_rewards) if all_rewards else "0.05"
-    print(f"[END] success={success_str} steps={len(all_rewards)} rewards={rewards_str}", flush=True)
+    print(
+        f"[END] success={success_str} steps={len(all_rewards)} "
+        f"score={final_score:.3f} rewards={rewards_str}",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
